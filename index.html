@@ -1,69 +1,40 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reconocimiento Facial ITSE</title>
+  <title>Reconocimiento Facial</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
   <style>
-    body { font-family: Arial; background: #f0f0f0; padding: 20px; }
-    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
-    h1 { color: #333; text-align: center; }
-    .webcam { width: 200px; height: 200px; margin: 20px auto; display: block; border: 2px solid #333; }
-    #resultado { text-align: center; font-size: 24px; margin: 20px 0; padding: 15px; border-radius: 5px; }
-    .loading { background: #f5f5f5; color: #666; }
-    .reconocido { background: #d4edda; color: #155724; }
-    .no-reconocido { background: #f8d7da; color: #721c24; }
+    body { font-family: Arial; text-align: center; padding: 20px; }
+    #webcam { width: 200px; height: 200px; border: 2px solid #333; margin: 20px auto; }
+    #resultado { font-size: 24px; margin: 20px; padding: 15px; border-radius: 5px; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🎓 Reconocimiento Facial ITSE</h1>
-    <video id="webcam" class="webcam" autoplay playsinline></video>
-    <canvas id="canvas" width="150" height="150" style="display:none"></canvas>
-    <div id="resultado" class="loading">🔄 Cargando...</div>
-  </div>
+  <h1>Reconocimiento Facial</h1>
+  <video id="webcam" autoplay playsinline></video>
+  <canvas id="canvas" width="150" height="150" style="display:none"></canvas>
+  <div id="resultado">Cargando...</div>
 
   <script>
     let modelo;
     let webcam;
     let canvas;
     let ctx;
-    let procesando = false;
+    let clases = {};
 
-    // 17 clases (17 personas)
-    const CLASES = [
-      "Alioth", "Daniela", "Elohim", "Gabriel", "Idney", 
-      "Jesus", "Josue", "Kevin", "Martin", "Miguel", 
-      "Nicole", "Patricia", "Roberto", "Victor", 
-      "Persona_15", "Persona_16", "Persona_17"
-    ];
-
-    // Cargar modelo al iniciar
     window.onload = async () => {
       try {
-        document.getElementById('resultado').textContent = '🔄 Cargando modelo...';
-        console.log('Cargando modelo...');
+        // Cargar clases
+        const resp = await fetch('clases.json');
+        clases = await resp.json();
         
+        // Cargar modelo
         modelo = await tf.loadLayersModel('model.json');
-        console.log('✅ Modelo cargado');
         
-        document.getElementById('resultado').textContent = '📷 Iniciando cámara...';
-        await iniciarCamara();
-        
-      } catch (err) {
-        console.error('❌ Error:', err);
-        document.getElementById('resultado').textContent = '❌ Error al cargar';
-        document.getElementById('resultado').className = 'no-reconocido';
-      }
-    };
-
-    async function iniciarCamara() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { width: 200, height: 200 } 
-        });
-        
+        // Iniciar cámara
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         webcam = document.getElementById('webcam');
         webcam.srcObject = stream;
         
@@ -73,38 +44,30 @@
         setTimeout(procesarFrame, 2000);
         
       } catch (err) {
-        console.error('❌ Error cámara:', err);
-        document.getElementById('resultado').textContent = '❌ Cámara no disponible';
-        document.getElementById('resultado').className = 'no-reconocido';
+        document.getElementById('resultado').textContent = 'Error: ' + err.message;
       }
-    }
+    };
 
     async function procesarFrame() {
-      if (!modelo || procesando) {
-        setTimeout(procesarFrame, 500);
-        return;
-      }
-      
-      procesando = true;
+      if (!modelo || !webcam) return;
       
       try {
         // Capturar frame
         ctx.drawImage(webcam, 0, 0, 150, 150);
         
-        // Preprocesar: RGB → Grayscale → Normalizar
+        // Preprocesar
         const imgData = ctx.getImageData(0, 0, 150, 150);
         const tensor = tf.tidy(() => {
           return tf.browser.fromPixels(imgData)
-            .mean(2)  // RGB → Grayscale
+            .mean(2)
             .expandDims(2)
             .expandDims(0)
-            .toFloat()
             .div(255.0);
         });
         
         // Predecir
-        const prediccion = modelo.predict(tensor);
-        const logits = await prediccion.data();
+        const pred = modelo.predict(tensor);
+        const logits = await pred.data();
         
         // Calcular softmax
         const maxLogit = Math.max(...logits);
@@ -112,28 +75,28 @@
         const sumExp = expLogits.reduce((a, b) => a + b, 0);
         const probs = expLogits.map(e => e / sumExp);
         
-        const claseIdx = probs.indexOf(Math.max(...probs));
-        const confianza = Math.max(...probs) * 100;
+        const idx = probs.indexOf(Math.max(...probs));
+        const conf = Math.max(...probs) * 100;
         
         // Mostrar resultado
-        const resultadoDiv = document.getElementById('resultado');
-        if (confianza > 35 && claseIdx < CLASES.length) {
-          resultadoDiv.className = 'reconocido';
-          resultadoDiv.textContent = `${CLASES[claseIdx]} (${confianza.toFixed(0)}%)`;
+        const res = document.getElementById('resultado');
+        if (conf > 35 && clases[idx]) {
+          res.textContent = `${clases[idx]} (${conf.toFixed(0)}%)`;
+          res.style.background = '#d4edda';
+          res.style.color = '#155724';
         } else {
-          resultadoDiv.className = 'no-reconocido';
-          resultadoDiv.textContent = '❓ No reconocido';
+          res.textContent = 'No reconocido';
+          res.style.background = '#f8d7da';
+          res.style.color = '#721c24';
         }
         
-        // Limpiar memoria
         tensor.dispose();
-        prediccion.dispose();
+        pred.dispose();
         
       } catch (err) {
-        console.error('Error:', err);
+        console.error(err);
       }
       
-      procesando = false;
       setTimeout(procesarFrame, 800);
     }
   </script>
