@@ -72,29 +72,49 @@
             const resultado = document.getElementById('resultado');
             
             try {
-                // Cargar modelo desde ROOT (archivos sueltos)
+                // 1. Cargar model.json
                 const response = await fetch('model.json');
-                const modelJson = await response.json();
+                let modelJson = await response.json();
                 
-                // Fix input shape si falta
+                // 2. Arreglar rutas de pesos (quitar "modelo_tfjs/" si existe)
+                if (modelJson.weightsManifest) {
+                    modelJson.weightsManifest.forEach(manifest => {
+                        if (manifest.paths) {
+                            manifest.paths = manifest.paths.map(p => 
+                                p.replace('modelo_tfjs/', '')
+                            );
+                        }
+                    });
+                }
+                
+                // 3. Agregar input shape si falta
                 if (modelJson.modelTopology?.model_config?.config?.layers) {
                     const layers = modelJson.modelTopology.model_config.config.layers;
-                    if (layers[0]?.class_name === 'InputLayer' && !layers[0].config.batch_input_shape) {
-                        layers[0].config.batch_input_shape = [null, 480, 640, 1];
-                        console.log("Input shape aplicado");
+                    for (let layer of layers) {
+                        if (layer.class_name === 'InputLayer') {
+                            layer.config.batch_input_shape = [null, 480, 640, 1];
+                            console.log("Input shape agregado");
+                            break;
+                        }
                     }
                 }
                 
-                modelo = await tf.loadLayersModel(tf.io.browserJSON(modelJson));
+                // 4. Crear Blob del JSON modificado y cargar modelo
+                const blob = new Blob([JSON.stringify(modelJson)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                modelo = await tf.loadLayersModel(url);
                 
-                // Cargar clases desde ROOT
+                // Limpiar URL temporal
+                URL.revokeObjectURL(url);
+                
+                // 5. Cargar clases
                 const responseClases = await fetch('clases.json');
                 const clases = await responseClases.json();
                 for (let [nombre, id] of Object.entries(clases)) {
                     nombres[id] = nombre;
                 }
                 
-                // Cámara 640x480
+                // 6. Cámara 640x480
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { width: 640, height: 480 } 
                 });
