@@ -1,205 +1,314 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reconocimiento Facial</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
-            padding: 20px; 
-            background: #f0f0f0; 
-            max-width: 800px; 
-            margin: 0 auto; 
-        }
-        #container { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 10px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
-        }
-        video { 
-            width: 640px; 
-            height: 480px; 
-            border: 3px solid #333; 
-            border-radius: 8px; 
-            background: #000; 
-        }
-        #resultado { 
-            font-size: 20px; 
-            margin: 20px 0; 
-            padding: 15px; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            min-height: 60px; 
-        }
-        .loading { background: #fff3cd; color: #856404; }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
-        button { 
-            background: #4CAF50; 
-            color: white; 
-            padding: 15px 30px; 
-            font-size: 18px; 
-            border: none; 
-            border-radius: 5px; 
-            cursor: pointer; 
-            margin: 10px; 
-        }
-        button:hover { background: #45a049; }
-        button:disabled { background: #cccccc; cursor: not-allowed; }
-        #status { margin-top: 10px; font-size: 14px; color: #666; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reconocimiento Facial ITSE - CNN</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 650px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 32px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 16px;
+    }
+    .webcam-container {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      margin: 0 auto 30px;
+      border: 4px solid #667eea;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+    }
+    #webcam {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #canvas {
+      display: none;
+    }
+    #resultado {
+      font-size: 32px;
+      font-weight: bold;
+      margin: 25px 0;
+      min-height: 50px;
+      padding: 20px;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+    .loading {
+      color: #666;
+      background: #f5f5f5;
+    }
+    .reconocido {
+      color: #28a745;
+      background: #d4edda;
+      animation: pulse 1s ease-in-out;
+    }
+    .no-reconocido {
+      color: #dc3545;
+      background: #f8d7da;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+    .stats {
+      margin-top: 30px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 12px;
+      text-align: left;
+      font-size: 14px;
+      color: #555;
+    }
+    .clase-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .clase-item {
+      background: #e9ecef;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e9ecef;
+      border-radius: 4px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .progress {
+      height: 100%;
+      background: #28a745;
+      transition: width 0.3s ease;
+    }
+    .footer {
+      margin-top: 20px;
+      font-size: 12px;
+      color: #999;
+    }
+  </style>
 </head>
 <body>
-    <div id="container">
-        <h1>🎓 Reconocimiento de Compañeros</h1>
-        <div id="resultado" class="loading">Inicializando...</div>
-        <div id="status">Cargando modelo...</div>
-        
-        <video id="video" autoplay playsinline></video>
-        <br>
-        <button id="btn-identificar" onclick="identificar()" disabled>
-            📸 Identificar Persona
-        </button>
+  <div class="container">
+    <h1>🎓 Reconocimiento Facial ITSE</h1>
+    <p class="subtitle">Sistema de identificación biométrica con Red Neuronal Convolucional</p>
+    
+    <div class="webcam-container">
+      <video id="webcam" autoplay playsinline></video>
     </div>
+    
+    <canvas id="canvas" width="150" height="150"></canvas>
+    
+    <div id="resultado" class="loading">🔄 Cargando modelo...</div>
+    
+    <div class="progress-bar" id="progressBar" style="display:none">
+      <div class="progress" id="progress" style="width:0%"></div>
+    </div>
+    
+    <div class="stats">
+      <p><strong>📊 Información del sistema:</strong></p>
+      <p>• <strong>Algoritmo:</strong> Red Neuronal Convolucional (CNN)</p>
+      <p>• <strong>Epochs de entrenamiento:</strong> 1,000</p>
+      <p>• <strong>Clases:</strong> 14 personas</p>
+      <p>• <strong>Resolución:</strong> 150×150 px</p>
+      <p>• <strong>Tecnología:</strong> TensorFlow.js</p>
+      
+      <p style="margin-top: 15px;"><strong>👥 Personas registradas:</strong></p>
+      <div class="clase-list" id="claseList">
+        <!-- Se llenará dinámicamente -->
+      </div>
+    </div>
+    
+    <div class="footer">
+      ITSE • Proyecto de Deep Learning
+    </div>
+  </div>
 
-    <script>
-        let modelo;
-        let nombres = {};
-        const statusDiv = document.getElementById('status');
+  <script>
+    // Variables globales
+    let modelo;
+    let webcam;
+    let canvas;
+    let ctx;
+    let procesando = false;
+    let clases = {};
+    let ultimaPrediccion = null;
+    let contadorEstable = 0;
+
+    // Iniciar cuando la página cargue
+    window.onload = async () => {
+      try {
+        // Cargar mapeo de clases
+        const responseClases = await fetch('clases.json');
+        clases = await responseClases.json();
         
-        async function init() {
-            try {
-                statusDiv.textContent = "Descargando configuración...";
-                
-                // 1. Cargar el JSON original (con batch_shape)
-                const response = await fetch('model.json');
-                let modelJson = await response.json();
-                
-                statusDiv.textContent = "Arreglando formato del modelo...";
-                
-                // 2. ARREGLAR AUTOMÁTICAMENTE: batch_shape -> batchInputShape
-                function fixInputLayers(obj) {
-                    if (Array.isArray(obj)) {
-                        obj.forEach(fixInputLayers);
-                    } else if (obj && typeof obj === 'object') {
-                        // Si es InputLayer con batch_shape, cambiar a batchInputShape
-                        if (obj.class_name === 'InputLayer' && obj.config) {
-                            if (obj.config.batch_shape) {
-                                obj.config.batchInputShape = obj.config.batch_shape;
-                                delete obj.config.batch_shape;
-                                console.log("✅ Capa InputLayer arreglada");
-                            }
-                        }
-                        // Recorrer todas las propiedades
-                        Object.values(obj).forEach(fixInputLayers);
-                    }
-                }
-                
-                fixInputLayers(modelJson);
-                
-                // 3. Arreglar rutas de pesos para que sean absolutas (para el blob)
-                const baseUrl = window.location.href.replace(/\/[^\/]*$/, '/');
-                if (modelJson.weightsManifest) {
-                    modelJson.weightsManifest.forEach(manifest => {
-                        manifest.paths = manifest.paths.map(p => {
-                            if (p.startsWith('http')) return p;
-                            return baseUrl + p; // Hacer URL absoluta
-                        });
-                    });
-                }
-                
-                statusDiv.textContent = "Creando modelo en memoria...";
-                
-                // 4. Crear blob del JSON arreglado y cargar modelo
-                const blob = new Blob([JSON.stringify(modelJson)], {type: 'application/json'});
-                const modelUrl = URL.createObjectURL(blob);
-                
-                modelo = await tf.loadLayersModel(modelUrl);
-                
-                // Liberar URL temporal
-                URL.revokeObjectURL(modelUrl);
-                
-                statusDiv.textContent = "Cargando nombres...";
-                
-                // 5. Cargar clases
-                const responseClases = await fetch('clases.json');
-                const clases = await responseClases.json();
-                for (let [nombre, id] of Object.entries(clases)) {
-                    nombres[id] = nombre;
-                }
-                
-                statusDiv.textContent = "Iniciando cámara...";
-                
-                // 6. Cámara (640x480)
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 640, height: 480 } 
-                });
-                document.getElementById('video').srcObject = stream;
-                
-                // Éxito
-                document.getElementById('resultado').className = 'success';
-                document.getElementById('resultado').innerText = 
-                    "✅ Sistema listo. Mira a la cámara y presiona 'Identificar'";
-                document.getElementById('btn-identificar').disabled = false;
-                statusDiv.style.display = 'none';
-                
-            } catch (error) {
-                console.error(error);
-                document.getElementById('resultado').className = 'error';
-                document.getElementById('resultado').innerText = "❌ Error: " + error.message;
-                statusDiv.textContent = "Error al cargar: " + error.message;
-            }
-        }
+        // Mostrar lista de clases
+        const claseList = document.getElementById('claseList');
+        Object.values(clases).forEach(nombre => {
+          const span = document.createElement('span');
+          span.className = 'clase-item';
+          span.textContent = nombre;
+          claseList.appendChild(span);
+        });
+        
+        // Cargar modelo
+        actualizarResultado("🔄 Cargando modelo CNN...", "loading");
+        console.log("Cargando modelo desde model.json...");
+        
+        modelo = await tf.loadLayersModel('model.json');
+        console.log("✅ Modelo cargado exitosamente");
+        
+        // Iniciar cámara
+        actualizarResultado("📷 Iniciando cámara...", "loading");
+        await iniciarCamara();
+        
+      } catch (err) {
+        console.error("❌ Error:", err);
+        actualizarResultado("❌ Error al cargar", "no-reconocido");
+      }
+    };
 
-        async function identificar() {
-            const btn = document.getElementById('btn-identificar');
-            const res = document.getElementById('resultado');
-            
-            btn.disabled = true;
-            res.className = 'loading';
-            res.innerText = "Analizando...";
-            
-            try {
-                const video = document.getElementById('video');
-                const canvas = document.createElement('canvas');
-                canvas.width = 640;
-                canvas.height = 480;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0, 640, 480);
-                
-                // Procesar imagen: Grayscale + normalizar (igual que en entrenamiento)
-                let tensor = tf.browser.fromPixels(canvas, 1);
-                tensor = tf.div(tensor, 255.0);
-                tensor = tensor.expandDims(0); // [1, 480, 640, 1]
-                
-                // Predecir
-                const prediccion = await modelo.predict(tensor).data();
-                const id = prediccion.indexOf(Math.max(...prediccion));
-                const confianza = (prediccion[id] * 100).toFixed(1);
-                const nombre = nombres[id] || "Desconocido";
-                
-                // Mostrar resultado
-                res.className = 'success';
-                res.innerHTML = `👤 ${nombre}<br>Confianza: ${confianza}%`;
-                
-                // Limpiar memoria
-                tensor.dispose();
-                
-            } catch (e) {
-                res.className = 'error';
-                res.innerText = "Error: " + e.message;
-                console.error(e);
-            }
-            
-            btn.disabled = false;
-        }
+    async function iniciarCamara() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 200 },
+            height: { ideal: 200 },
+            facingMode: "user"
+          } 
+        });
+        
+        webcam = document.getElementById('webcam');
+        webcam.srcObject = stream;
+        
+        canvas = document.getElementById('canvas');
+        ctx = canvas.getContext('2d');
+        
+        // Esperar a que la cámara se inicie
+        setTimeout(iniciarDeteccion, 2000);
+        
+      } catch (err) {
+        console.error("❌ Error al acceder a cámara:", err);
+        actualizarResultado("❌ Cámara no disponible", "no-reconocido");
+      }
+    }
 
-        // Iniciar al cargar página
-        window.onload = init;
-    </script>
+    function iniciarDeteccion() {
+      actualizarResultado("👀 Esperando rostro...", "loading");
+      procesarFrame();
+    }
+
+    async function procesarFrame() {
+      if (!modelo || procesando) {
+        setTimeout(procesarFrame, 500);
+        return;
+      }
+      
+      procesando = true;
+      
+      try {
+        // Capturar frame
+        ctx.drawImage(webcam, 0, 0, 150, 150);
+        
+        // Convertir a tensor en escala de grises
+        const imgData = ctx.getImageData(0, 0, 150, 150);
+        const tensor = tf.tidy(() => {
+          return tf.browser.fromPixels(imgData)
+            .mean(2)  // RGB → Grayscale
+            .expandDims(2)
+            .expandDims(0)
+            .toFloat()
+            .div(255.0);
+        });
+        
+        // Predecir
+        const prediccion = modelo.predict(tensor);
+        const logits = await prediccion.data();
+        
+        // Calcular softmax
+        const maxLogit = Math.max(...logits);
+        const expLogits = logits.map(l => Math.exp(l - maxLogit));
+        const sumExp = expLogits.reduce((a, b) => a + b, 0);
+        const probs = expLogits.map(e => e / sumExp);
+        
+        const claseIdx = probs.indexOf(Math.max(...probs));
+        const confianza = Math.max(...probs) * 100;
+        
+        // Mostrar resultado
+        if (confianza > 40 && clases[claseIdx]) {
+          const nombre = clases[claseIdx];
+          
+          // Verificar estabilidad
+          if (ultimaPrediccion === nombre) {
+            contadorEstable++;
+          } else {
+            ultimaPrediccion = nombre;
+            contadorEstable = 1;
+          }
+          
+          if (contadorEstable >= 2) {
+            actualizarResultado(`${nombre}`, "reconocido");
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('progress').style.width = `${confianza}%`;
+          }
+        } else {
+          actualizarResultado("❓ No reconocido", "no-reconocido");
+          document.getElementById('progressBar').style.display = 'none';
+          ultimaPrediccion = null;
+          contadorEstable = 0;
+        }
+        
+        // Limpiar memoria
+        tensor.dispose();
+        prediccion.dispose();
+        
+      } catch (err) {
+        console.error("Error en procesamiento:", err);
+      }
+      
+      procesando = false;
+      setTimeout(procesarFrame, 600); // Procesar cada 600ms
+    }
+
+    function actualizarResultado(texto, clase) {
+      const div = document.getElementById('resultado');
+      div.textContent = texto;
+      div.className = clase;
+    }
+  </script>
 </body>
 </html>
