@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Reconocimiento Facial</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <style>
+        body { font-family: Arial; text-align: center; padding: 20px; background: #f0f0f0; }
+        #container { background: white; padding: 20px; border-radius: 10px; max-width: 700px; margin: 0 auto; }
+        video { width: 100%; max-width: 640px; height: 480px; border: 3px solid #333; border-radius: 8px; background: #000; }
+        #resultado { font-size: 24px; margin-top: 20px; padding: 15px; border-radius: 8px; font-weight: bold; min-height: 60px; }
+        .success { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+        .loading { background: #fff3cd; color: #856404; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; margin: 10px; background: #4CAF50; color: white; border: none; border-radius: 5px; }
+        button:hover { background: #45a049; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>🎓 Reconocimiento Facial</h1>
+        <p>Redes Neuronales - TensorFlow.js</p>
+        
+        <div id="resultado" class="loading">Cargando modelo...</div>
+        
+        <video id="video" autoplay playsinline></video>
+        <br>
+        <button id="btn" onclick="identificar()" disabled>📸 Identificar</button>
+    </div>
+
+    <script>
+        let modelo;
+        let nombres = {};
+        
+        async function init() {
+            try {
+                // ⚠️ IMPORTANTE: Cargar desde root (sin carpeta)
+                modelo = await tf.loadLayersModel('model.json');
+                
+                // Cargar etiquetas
+                const response = await fetch('clases.json');
+                const clases = await response.json();
+                for (let [nombre, id] of Object.entries(clases)) {
+                    nombres[id] = nombre;
+                }
+                
+                document.getElementById('resultado').className = 'success';
+                document.getElementById('resultado').innerText = "✅ Modelo listo. Mira a la cámara y presiona Identificar";
+                document.getElementById('btn').disabled = false;
+                
+                // Cámara 640x480
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                document.getElementById('video').srcObject = stream;
+                
+            } catch (error) {
+                document.getElementById('resultado').innerText = "❌ Error: " + error.message;
+                console.error(error);
+            }
+        }
+
+        async function identificar() {
+            const btn = document.getElementById('btn');
+            const res = document.getElementById('resultado');
+            btn.disabled = true;
+            res.innerText = "Analizando...";
+            
+            try {
+                const video = document.getElementById('video');
+                const canvas = document.createElement('canvas');
+                canvas.width = 640;
+                canvas.height = 480;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, 640, 480);
+                
+                // Grayscale + normalizar (igual que en entrenamiento)
+                let tensor = tf.browser.fromPixels(canvas, 1);
+                tensor = tf.div(tensor, 255.0);
+                tensor = tensor.expandDims(0);
+                
+                const pred = await modelo.predict(tensor).data();
+                const id = pred.indexOf(Math.max(...pred));
+                const conf = (pred[id] * 100).toFixed(1);
+                const nombre = nombres[id] || "Desconocido";
+                
+                res.innerHTML = `👤 ${nombre}<br>Confianza: ${conf}%`;
+                tensor.dispose();
+                
+            } catch (e) {
+                res.innerText = "Error: " + e.message;
+            }
+            btn.disabled = false;
+        }
+
+        init();
+    </script>
+</body>
+</html>
