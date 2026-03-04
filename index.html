@@ -6,9 +6,9 @@
   <title>Reconocimiento Facial</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
   <style>
-    body { font-family: Arial; text-align: center; padding: 20px; }
+    body { text-align: center; padding: 20px; }
     #webcam { width: 200px; height: 200px; border: 2px solid #333; margin: 20px auto; }
-    #resultado { font-size: 24px; margin: 20px; padding: 15px; border-radius: 5px; }
+    #resultado { font-size: 20px; margin: 20px; padding: 15px; }
   </style>
 </head>
 <body>
@@ -30,8 +30,8 @@
         const resp = await fetch('clases.json');
         clases = await resp.json();
         
-        // Cargar modelo
-        modelo = await tf.loadLayersModel('model.json');
+        // Cargar modelo (USAR loadGraphModel en lugar de loadLayersModel)
+        modelo = await tf.loadGraphModel('model.json');
         
         // Iniciar cámara
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -49,17 +49,20 @@
     };
 
     async function procesarFrame() {
-      if (!modelo || !webcam) return;
+      if (!modelo || !webcam) {
+        setTimeout(procesarFrame, 500);
+        return;
+      }
       
       try {
         // Capturar frame
         ctx.drawImage(webcam, 0, 0, 150, 150);
         
-        // Preprocesar
+        // Preprocesar: RGB → Grayscale → Normalizar
         const imgData = ctx.getImageData(0, 0, 150, 150);
         const tensor = tf.tidy(() => {
           return tf.browser.fromPixels(imgData)
-            .mean(2)
+            .mean(2)  // RGB → Grayscale
             .expandDims(2)
             .expandDims(0)
             .div(255.0);
@@ -83,11 +86,9 @@
         if (conf > 35 && clases[idx]) {
           res.textContent = `${clases[idx]} (${conf.toFixed(0)}%)`;
           res.style.background = '#d4edda';
-          res.style.color = '#155724';
         } else {
           res.textContent = 'No reconocido';
           res.style.background = '#f8d7da';
-          res.style.color = '#721c24';
         }
         
         tensor.dispose();
